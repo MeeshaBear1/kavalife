@@ -17,14 +17,14 @@ checkout switches from mock to real Stripe Checkout (see `src/lib/stripe.ts`).
    mode** (toggle, top-right).
 
 2. Copy your test keys from **Developers → API keys**:
-   - **Secret key** → `sk_test_[redacted]...`
-   - **Publishable key** → `pk_test_[redacted]...`
+   - **Secret key** → `sk_test_...`
+   - **Publishable key** → `pk_test_...`
 
 3. Add them to your environment. For Docker, put them in `.env` next to
    `docker-compose.yml`:
    ```env
-   STRIPE_SECRET_KEY=sk_test_[redacted]
-   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_[redacted]
+   STRIPE_SECRET_KEY=sk_test_[your-test-secret-key]
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_[your-test-publishable-key]
    NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
    (For local `npm run dev`, set the same vars in your `.env`.)
@@ -37,9 +37,9 @@ checkout switches from mock to real Stripe Checkout (see `src/lib/stripe.ts`).
    stripe login
    stripe listen --forward-to localhost:3000/api/webhooks/stripe
    ```
-   The CLI prints a signing secret like `whsec_[redacted]...`. Put it in `.env`:
+   The CLI prints a signing secret like `whsec_...`. Put it in `.env`:
    ```env
-   STRIPE_WEBHOOK_SECRET=whsec_[redacted]
+   STRIPE_WEBHOOK_SECRET=whsec_[your-webhook-secret]
    ```
    Keep `stripe listen` running in its own terminal while you test.
 
@@ -74,20 +74,20 @@ the Stripe session, but the webhook is the source of truth — keep it configure
 1. In the Stripe dashboard, flip to **Live mode** and complete account
    activation (business details, bank account for payouts).
 
-2. Get your **live** keys from **Developers → API keys**: `sk_live_[redacted]...` and
-   `pk_live_[redacted]...`.
+2. Get your **live** keys from **Developers → API keys**: `sk_live_...` and
+   `pk_live_...`.
 
 3. Create a **live webhook endpoint**: **Developers → Webhooks → Add endpoint**
    - Endpoint URL: `https://YOURDOMAIN.com/api/webhooks/stripe`
    - Events to send: **`checkout.session.completed`** (and optionally
      `checkout.session.async_payment_succeeded` for delayed methods).
-   - After creating it, copy its **Signing secret** (`whsec_[redacted]...`).
+   - After creating it, copy its **Signing secret** (`whsec_...`).
 
 4. Set the production environment to the live values and redeploy:
    ```env
-   STRIPE_SECRET_KEY=sk_live_[redacted]
-   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_[redacted]
-   STRIPE_WEBHOOK_SECRET=whsec_[redacted](from the LIVE endpoint)
+   STRIPE_SECRET_KEY=sk_live_[your-live-secret-key]
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_[your-live-publishable-key]
+   STRIPE_WEBHOOK_SECRET=whsec_[from-the-live-endpoint]
    NEXT_PUBLIC_SITE_URL=https://YOURDOMAIN.com
    ```
    ```bash

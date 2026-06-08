@@ -1,194 +1,33 @@
 import { PrismaClient, Category, StockReason } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { readFileSync } from "fs";
 
 const prisma = new PrismaClient();
 
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-type SeedProduct = {
+type CatalogProduct = {
   name: string;
+  slug: string;
   category: Category;
-  flavor: string;
+  flavor: string | null;
   priceCents: number;
-  accentColor: string;
+  sku: string | null;
+  imageUrl: string | null;
+  accentColor: string | null;
   shortDescription: string;
   description: string;
+  sortOrder: number;
+  featured: boolean;
+  rating: number;
+  reviewCount: number;
   stock: number;
-  featured?: boolean;
-  rating?: number;
-  reviewCount?: number;
+  lowStockThreshold: number;
 };
 
-const DEFAULT_DESC =
-  "Crafted with premium Noble Kava and our patented nano-extraction for a smooth, clean calm — zero alcohol, zero hangover. These statements have not been evaluated by the FDA.";
-
-const PRODUCTS: SeedProduct[] = [
-  // ---- GUMMIES ($17.99) ----
-  {
-    name: "Kava Gummies — Dragon Fruit Lychee",
-    category: "GUMMIES",
-    flavor: "Dragon Fruit Lychee",
-    priceCents: 1799,
-    accentColor: "#e3548b",
-    shortDescription: "Tropical chew for easy, social calm.",
-    description: DEFAULT_DESC,
-    stock: 140,
-    featured: true,
-    rating: 4.9,
-    reviewCount: 212,
-  },
-  {
-    name: "Kava Gummies — Lemon Ginger",
-    category: "GUMMIES",
-    flavor: "Lemon Ginger",
-    priceCents: 1799,
-    accentColor: "#ffcd4d",
-    shortDescription: "Bright citrus with a warming ginger finish.",
-    description: DEFAULT_DESC,
-    stock: 120,
-    rating: 4.8,
-    reviewCount: 168,
-  },
-  {
-    name: "Kava Gummies — Pineapple Coconut",
-    category: "GUMMIES",
-    flavor: "Pineapple Coconut",
-    priceCents: 1799,
-    accentColor: "#f5b301",
-    shortDescription: "Beach-day vibes in a bite.",
-    description: DEFAULT_DESC,
-    stock: 132,
-    rating: 4.9,
-    reviewCount: 190,
-  },
-  // ---- SHOTS ($5.49) ----
-  {
-    name: "Kava Shot — Ginger Lime",
-    category: "SHOTS",
-    flavor: "Ginger Lime",
-    priceCents: 549,
-    accentColor: "#1fa85c",
-    shortDescription: "Fast-acting 2oz reset. Down it and unwind.",
-    description: DEFAULT_DESC,
-    stock: 240,
-    featured: true,
-    rating: 4.8,
-    reviewCount: 143,
-  },
-  {
-    name: "Kava Shot — Pineapple Coconut",
-    category: "SHOTS",
-    flavor: "Pineapple Coconut",
-    priceCents: 549,
-    accentColor: "#f5b301",
-    shortDescription: "A tropical 2oz pick-me-calm.",
-    description: DEFAULT_DESC,
-    stock: 228,
-    rating: 4.7,
-    reviewCount: 119,
-  },
-  // ---- SELTZERS ($6.49) ----
-  {
-    name: "Kava Seltzer — Mixed Berry",
-    category: "SELTZERS",
-    flavor: "Mixed Berry",
-    priceCents: 649,
-    accentColor: "#b5468f",
-    shortDescription: "Crisp, bubbly, and ridiculously easy to love.",
-    description: DEFAULT_DESC,
-    stock: 300,
-    featured: true,
-    rating: 4.9,
-    reviewCount: 264,
-  },
-  {
-    name: "Kava Seltzer — Lemon Lime",
-    category: "SELTZERS",
-    flavor: "Lemon Lime",
-    priceCents: 649,
-    accentColor: "#8bc34a",
-    shortDescription: "Zesty, clean, and endlessly sippable.",
-    description: DEFAULT_DESC,
-    stock: 286,
-    rating: 4.8,
-    reviewCount: 201,
-  },
-  {
-    name: "Kava Seltzer — Pineapple Coconut",
-    category: "SELTZERS",
-    flavor: "Pineapple Coconut",
-    priceCents: 649,
-    accentColor: "#f5b301",
-    shortDescription: "Piña-vibes without the hangover.",
-    description: DEFAULT_DESC,
-    stock: 274,
-    rating: 4.9,
-    reviewCount: 233,
-  },
-  {
-    name: "Kava Seltzer — Dragon Fruit Lychee",
-    category: "SELTZERS",
-    flavor: "Dragon Fruit Lychee",
-    priceCents: 649,
-    accentColor: "#e3548b",
-    shortDescription: "Exotic, floral, and seriously refreshing.",
-    description: DEFAULT_DESC,
-    stock: 268,
-    rating: 4.8,
-    reviewCount: 188,
-  },
-  {
-    name: "Kava Seltzer — Mango Orange",
-    category: "SELTZERS",
-    flavor: "Mango Orange",
-    priceCents: 649,
-    accentColor: "#f97316",
-    shortDescription: "Sunset in a can.",
-    description: DEFAULT_DESC,
-    stock: 252,
-    rating: 4.7,
-    reviewCount: 156,
-  },
-  {
-    name: "Kava Seltzer — Strawberry Kiwi",
-    category: "SELTZERS",
-    flavor: "Strawberry Kiwi",
-    priceCents: 649,
-    accentColor: "#f2615c",
-    shortDescription: "Sweet-tart and made for the porch.",
-    description: DEFAULT_DESC,
-    stock: 240,
-    rating: 4.8,
-    reviewCount: 174,
-  },
-  {
-    name: "Kava Seltzer — Ginger Lime",
-    category: "SELTZERS",
-    flavor: "Ginger Lime",
-    priceCents: 649,
-    accentColor: "#14b8a6",
-    shortDescription: "Spicy-citrus sparkle with a calm core.",
-    description: DEFAULT_DESC,
-    stock: 236,
-    rating: 4.9,
-    reviewCount: 197,
-  },
-];
-
-function skuFor(p: SeedProduct, index: number): string {
-  const cat = p.category.slice(0, 3);
-  const fl = p.flavor
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-  return `KL-${cat}-${fl}-${String(index + 1).padStart(2, "0")}`;
-}
+// Real Kava Life catalog, migrated from the live Shopify store
+// (lovable-project-pzrlt.myshopify.com). Photos live in public/products/.
+const catalog = JSON.parse(
+  readFileSync(new URL("./catalog.json", import.meta.url), "utf8")
+) as CatalogProduct[];
 
 async function main() {
   console.log("Seeding Kava Life...");
@@ -215,28 +54,29 @@ async function main() {
     console.log(`  • admin already exists: ${adminEmail}`);
   }
 
-  // 3) Products (only when catalog is empty)
+  // 3) Products (only when the catalog is empty)
   const productCount = await prisma.product.count();
   if (productCount === 0) {
-    let sortOrder = 0;
-    for (const [index, p] of PRODUCTS.entries()) {
+    for (const p of catalog) {
       const created = await prisma.product.create({
         data: {
           name: p.name,
-          slug: slugify(p.name),
+          slug: p.slug,
           category: p.category,
           flavor: p.flavor,
           shortDescription: p.shortDescription,
           description: p.description,
           priceCents: p.priceCents,
-          sku: skuFor(p, index),
+          sku: p.sku,
+          imageUrl: p.imageUrl,
           accentColor: p.accentColor,
-          rating: p.rating ?? 5,
-          reviewCount: p.reviewCount ?? 0,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
           stock: p.stock,
-          featured: p.featured ?? false,
+          lowStockThreshold: p.lowStockThreshold,
+          featured: p.featured,
           active: true,
-          sortOrder: sortOrder++,
+          sortOrder: p.sortOrder,
         },
       });
       await prisma.stockMovement.create({
@@ -245,11 +85,11 @@ async function main() {
           delta: p.stock,
           balance: p.stock,
           reason: StockReason.INITIAL,
-          note: "Initial seed inventory",
+          note: "Opening inventory (migrated from Shopify catalog)",
         },
       });
     }
-    console.log(`  ✓ seeded ${PRODUCTS.length} products with opening inventory`);
+    console.log(`  ✓ seeded ${catalog.length} products with opening inventory`);
   } else {
     console.log(`  • products already present (${productCount}); skipping catalog seed`);
   }
