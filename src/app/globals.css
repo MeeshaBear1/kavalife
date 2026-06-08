@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Fonts are loaded via <link> in the root layout (build stays offline-safe). */
+  --font-poppins: "Poppins", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-inter: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-cream text-ink;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .container-kl {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-display font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-kava-500 px-6 py-3 font-display font-semibold text-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:bg-kava-600 hover:shadow-lift active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 font-display font-semibold text-kava-700 ring-1 ring-kava-200 transition-all duration-200 hover:bg-kava-50 hover:ring-kava-400;
+  }
+  .btn-sunset {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-sunset-500 px-6 py-3 font-display font-semibold text-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:bg-sunset-600;
+  }
+  .btn-ghost-light {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 font-display font-semibold text-white ring-1 ring-white/50 backdrop-blur-sm transition-all duration-200 hover:bg-white/15;
+  }
+  .badge-price {
+    @apply inline-flex items-center rounded-full bg-kava-50 px-3 py-1 text-sm font-semibold text-kava-700;
+  }
+  .eyebrow {
+    @apply font-display text-xs font-semibold uppercase tracking-[0.2em] text-kava-600;
+  }
+  .section {
+    @apply py-16 sm:py-20 lg:py-24;
+  }
+  .card-surface {
+    @apply rounded-3xl bg-white shadow-card;
+  }
+  .field {
+    @apply w-full rounded-xl border border-sand bg-white px-4 py-2.5 text-ink outline-none transition focus:border-kava-400 focus:ring-2 focus:ring-kava-200;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink/80;
+  }
+}
+
+/* Hide number input spinners in admin forms */
+input[type="number"].no-spin::-webkit-inner-spin-button,
+input[type="number"].no-spin::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

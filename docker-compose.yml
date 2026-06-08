@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kava
+      POSTGRES_PASSWORD: kava_dev_password
+      POSTGRES_DB: kavalife
+    volumes:
+      - kava_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kava -d kavalife"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # Host port 5434 avoids clashing with other local Postgres instances.
+    ports:
+      - "5434:5432"
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://kava:kava_dev_password@db:5432/kavalife"
+      NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
+      SESSION_SECRET: "${SESSION_SECRET:-dev_change_me_session_secret_min_32_chars_long_please}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@kavalife.local}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}"
+      UPLOAD_DIR: "/app/uploads"
+    volumes:
+      # Persist admin-uploaded product photos across rebuilds.
+      - kava_uploads:/app/uploads
+    ports:
+      - "3000:3000"
+
+volumes:
+  kava_db:
+  kava_uploads:

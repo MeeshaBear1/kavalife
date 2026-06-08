@@ -1,0 +1,12 @@
+# Normalize all text files to LF in the repository (this project builds and runs
+# in Linux containers; CRLF in shell scripts like docker-entrypoint.sh would break).
+* text=auto eol=lf
+
+# Binary types should never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.avif binary
+*.ico binary

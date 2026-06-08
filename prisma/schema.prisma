@@ -1,0 +1,151 @@
+// Kava Life data model — products, inventory, orders, admin, marketing.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  GUMMIES
+  SHOTS
+  SELTZERS
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum StockReason {
+  INITIAL
+  RESTOCK
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+model Product {
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  category          Category
+  flavor            String?
+  shortDescription  String?
+  description       String?
+  priceCents        Int
+  compareAtCents    Int?
+  sku               String?   @unique
+  imageUrl          String?
+  accentColor       String?   // hex used for the gradient placeholder when no image
+  rating            Float     @default(5)
+  reviewCount       Int       @default(0)
+  stock             Int       @default(0)
+  lowStockThreshold Int       @default(12)
+  featured          Boolean   @default(false)
+  active            Boolean   @default(true)
+  sortOrder         Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  orderItems        OrderItem[]
+  stockMovements    StockMovement[]
+
+  @@index([category])
+  @@index([active])
+}
+
+// Append-only ledger of every stock change — the inventory audit trail.
+model StockMovement {
+  id        String      @id @default(cuid())
+  productId String
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  delta     Int // positive = added, negative = removed
+  balance   Int // resulting stock after this movement
+  reason    StockReason
+  note      String?
+  orderId   String?
+  createdAt DateTime    @default(now())
+
+  @@index([productId])
+}
+
+model Order {
+  id                    String      @id @default(cuid())
+  orderNumber           String      @unique
+  status                OrderStatus @default(PENDING)
+  email                 String
+  customerName          String?
+  phone                 String?
+  shippingAddress       Json?
+  subtotalCents         Int
+  shippingCents         Int         @default(0)
+  taxCents              Int         @default(0)
+  discountCents         Int         @default(0)
+  totalCents            Int
+  currency              String      @default("usd")
+  stripeSessionId       String?     @unique
+  stripePaymentIntentId String?
+  discountCode          String?
+  notes                 String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  paidAt                DateTime?
+  fulfilledAt           DateTime?
+
+  items                 OrderItem[]
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name           String // snapshot at purchase time
+  flavor         String?
+  unitPriceCents Int
+  quantity       Int
+  lineTotalCents Int
+
+  @@index([orderId])
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+}
+
+model NewsletterSignup {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  discountCode String?
+  source       String?
+  createdAt    DateTime @default(now())
+}
+
+// Single-row store configuration (id is always 1).
+model StoreSettings {
+  id                         Int      @id @default(1)
+  storeName                  String   @default("Kava Life")
+  announcement               String?  @default("Free shipping on orders over $50 — zero hangover guaranteed")
+  supportEmail               String   @default("aloha@kavalife.com")
+  flatShippingCents          Int      @default(599)
+  freeShippingThresholdCents Int      @default(5000)
+  taxRateBps                 Int      @default(0) // basis points; 875 = 8.75%
+  currency                   String   @default("usd")
+  updatedAt                  DateTime @updatedAt
+}
