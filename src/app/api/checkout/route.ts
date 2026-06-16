@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { createSquarePaymentLink } from "@/lib/square";
+import { activeProcessor, mockCheckoutBlocked } from "@/lib/payments";
 import { getSettings, computeShippingCents, computeTaxCents } from "@/lib/settings";
 import { markOrderPaid } from "@/lib/orders";
 import { generateOrderNumber } from "@/lib/utils";
@@ -120,46 +122,83 @@ export async function POST(req: Request) {
     },
   });
 
-  // --- MOCK MODE: no Stripe keys -> mark paid immediately so the flow works. ---
-  if (!isStripeConfigured || !stripe) {
-    await markOrderPaid(order.id);
+  // Generic checkout lines (products + shipping + tax), mapped per processor.
+  const checkoutLines = [
+    ...lines.map((l) => ({
+      name: l.product.name,
+      amountCents: l.product.priceCents,
+      quantity: l.quantity,
+    })),
+    ...(shippingCents > 0 ? [{ name: "Shipping", amountCents: shippingCents, quantity: 1 }] : []),
+    ...(taxCents > 0 ? [{ name: "Tax", amountCents: taxCents, quantity: 1 }] : []),
+  ];
+
+  const processor = activeProcessor();
+
+  // --- MOCK MODE: no processor configured -> mark paid without a charge. ---
+  // Blocked in production so the live store can never hand out free product.
+  if (processor === "mock") {
+    if (mockCheckoutBlocked()) {
+      return NextResponse.json(
+        { error: "Online payments are not available right now. Please try again later." },
+        { status: 503 }
+      );
+    }
+    await markOrderPaid(order.id, { provider: "mock" });
     return NextResponse.json({
       url: `${siteUrl()}/checkout/success?order=${order.orderNumber}&mock=1`,
       mock: true,
     });
   }
 
-  // --- REAL STRIPE CHECKOUT ---
-  const lineItems: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] = lines.map(
-    (l) => ({
+  // --- SQUARE (primary): hosted payment link. ---
+  if (processor === "square") {
+    try {
+      const { url, squareOrderId } = await createSquarePaymentLink({
+        idempotencyKey: order.id,
+        referenceId: order.id,
+        currency: settings.currency,
+        buyerEmail: email.toLowerCase(),
+        lineItems: checkoutLines.map((l) => ({
+          name: l.name,
+          quantity: l.quantity,
+          amountCents: l.amountCents,
+        })),
+        redirectUrl: `${siteUrl()}/checkout/success?order=${order.orderNumber}&provider=square`,
+        note: `Kava Life order ${order.orderNumber}`,
+      });
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { squareOrderId, paymentProvider: "square" },
+      });
+
+      return NextResponse.json({ url });
+    } catch (err) {
+      console.error("Square checkout error:", err);
+      return NextResponse.json(
+        { error: "Could not start checkout. Please try again." },
+        { status: 502 }
+      );
+    }
+  }
+
+  // --- STRIPE (fallback): hosted Checkout Session. ---
+  if (!stripe) {
+    return NextResponse.json(
+      { error: "Online payments are not available right now. Please try again later." },
+      { status: 503 }
+    );
+  }
+  const lineItems: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] =
+    checkoutLines.map((l) => ({
       price_data: {
         currency: settings.currency,
-        product_data: { name: l.product.name },
-        unit_amount: l.product.priceCents,
+        product_data: { name: l.name },
+        unit_amount: l.amountCents,
       },
       quantity: l.quantity,
-    })
-  );
-  if (shippingCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: settings.currency,
-        product_data: { name: "Shipping" },
-        unit_amount: shippingCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (taxCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: settings.currency,
-        product_data: { name: "Tax" },
-        unit_amount: taxCents,
-      },
-      quantity: 1,
-    });
-  }
+    }));
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -174,7 +213,7 @@ export async function POST(req: Request) {
 
     await prisma.order.update({
       where: { id: order.id },
-      data: { stripeSessionId: session.id },
+      data: { stripeSessionId: session.id, paymentProvider: "stripe" },
     });
 
     return NextResponse.json({ url: session.url });

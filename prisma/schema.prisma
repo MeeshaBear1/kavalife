@@ -4,8 +4,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection for the app runtime (PgBouncer / Vercel Postgres pooled URL).
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection used by the Prisma CLI for db push / migrate.
+  // In Docker & local dev this is defaulted to DATABASE_URL (see docker-entrypoint.sh / .env).
+  directUrl = env("DIRECT_URL")
 }
 
 enum Category {
@@ -89,8 +93,13 @@ model Order {
   discountCents         Int         @default(0)
   totalCents            Int
   currency              String      @default("usd")
+  // Which processor handled this order: "square" | "stripe" | "mock".
+  paymentProvider       String?
   stripeSessionId       String?     @unique
   stripePaymentIntentId String?
+  // Square hosted-checkout references (mirror of the Stripe fields above).
+  squareOrderId         String?     @unique
+  squarePaymentId       String?
   discountCode          String?
   notes                 String?
   createdAt             DateTime    @default(now())

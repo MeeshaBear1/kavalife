@@ -3,6 +3,10 @@ set -e
 
 echo "==> Kava Life starting up"
 
+# The Prisma schema references DIRECT_URL (used by the CLI for db push). In
+# Docker there's a single, non-pooled Postgres, so default it to DATABASE_URL.
+export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
+
 # Wait for the database to accept connections, then sync the schema.
 echo "==> Syncing database schema (prisma db push)..."
 ATTEMPTS=0

@@ -25,10 +25,18 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://kava:kava_dev_password@db:5432/kavalife"
+      # Single non-pooled DB in Docker — direct URL mirrors DATABASE_URL.
+      DIRECT_URL: "postgresql://kava:kava_dev_password@db:5432/kavalife"
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
       SESSION_SECRET: "${SESSION_SECRET:-dev_change_me_session_secret_min_32_chars_long_please}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@kavalife.local}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
+      # --- Square (primary processor) ---
+      SQUARE_ACCESS_TOKEN: "${SQUARE_ACCESS_TOKEN:-}"
+      SQUARE_LOCATION_ID: "${SQUARE_LOCATION_ID:-}"
+      SQUARE_ENV: "${SQUARE_ENV:-production}"
+      SQUARE_WEBHOOK_SIGNATURE_KEY: "${SQUARE_WEBHOOK_SIGNATURE_KEY:-}"
+      # --- Stripe (fallback processor) ---
       STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}"

@@ -64,5 +64,5 @@ async function fulfillSession(session: Stripe.Checkout.Session) {
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id;
-  await markOrderPaid(order.id, { paymentIntentId });
+  await markOrderPaid(order.id, { paymentIntentId, provider: "stripe" });
 }

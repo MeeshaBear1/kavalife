@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { isSquareConfigured, retrieveSquareOrder } from "@/lib/square";
 import { markOrderPaid } from "@/lib/orders";
 import { formatCents } from "@/lib/money";
 import { ClearCart } from "@/components/store/ClearCart";
@@ -12,7 +13,12 @@ export const metadata = { title: "Order confirmed" };
 export default async function SuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ order?: string; session_id?: string; mock?: string }>;
+  searchParams: Promise<{
+    order?: string;
+    session_id?: string;
+    mock?: string;
+    provider?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const orderNumber = sp.order;
@@ -30,7 +36,7 @@ export default async function SuccessPage({
           typeof session.payment_intent === "string"
             ? session.payment_intent
             : session.payment_intent?.id;
-        await markOrderPaid(order.id, { paymentIntentId: pi });
+        await markOrderPaid(order.id, { paymentIntentId: pi, provider: "stripe" });
         order = await prisma.order.findUnique({
           where: { id: order.id },
           include: { items: true },
@@ -38,6 +44,23 @@ export default async function SuccessPage({
       }
     } catch {
       /* ignore — webhook will reconcile */
+    }
+  }
+
+  // No-webhook fallback for Square: confirm via the Square order if still pending.
+  if (
+    order &&
+    order.status === "PENDING" &&
+    order.squareOrderId &&
+    isSquareConfigured
+  ) {
+    const sq = await retrieveSquareOrder(order.squareOrderId);
+    if (sq && (sq.state === "COMPLETED" || sq.netAmountDueCents === 0)) {
+      await markOrderPaid(order.id, { provider: "square" });
+      order = await prisma.order.findUnique({
+        where: { id: order.id },
+        include: { items: true },
+      });
     }
   }
 

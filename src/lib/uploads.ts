@@ -41,10 +41,24 @@ export async function saveUpload(file: File): Promise<{ url: string; filename: s
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
+  const filename = `${Date.now().toString(36)}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+
+  // Vercel Blob: persistent object storage. Required on Vercel, whose runtime
+  // filesystem is ephemeral — local writes would vanish on the next deploy.
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const { put } = await import("@vercel/blob");
+    const blob = await put(`products/${filename}`, buf, {
+      access: "public",
+      contentType: file.type,
+      addRandomSuffix: false,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+    return { url: blob.url, filename };
+  }
+
+  // Local-disk fallback (Docker volume / local dev).
   const dir = getUploadDir();
   await fs.mkdir(dir, { recursive: true });
-
-  const filename = `${Date.now().toString(36)}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
   await fs.writeFile(path.join(dir, filename), buf);
 
   return { url: `/uploads/${filename}`, filename };
