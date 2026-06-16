@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { isSquareConfigured, getPayment, getOrder } from "@/lib/square";
 import { markOrderPaid } from "@/lib/orders";
 import { formatCents } from "@/lib/money";
 import { ClearCart } from "@/components/store/ClearCart";
@@ -12,7 +12,13 @@ export const metadata = { title: "Order confirmed" };
 export default async function SuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ order?: string; session_id?: string; mock?: string }>;
+  searchParams: Promise<{
+    order?: string;
+    transactionId?: string;
+    orderId?: string;
+    mock?: string;
+    reserved?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const orderNumber = sp.order;
@@ -21,16 +27,29 @@ export default async function SuccessPage({
     ? await prisma.order.findUnique({ where: { orderNumber }, include: { items: true } })
     : null;
 
-  // No-webhook fallback: confirm via the Stripe session if still pending.
-  if (order && order.status === "PENDING" && sp.session_id && isStripeConfigured && stripe) {
+  // No-webhook fallback: confirm via Square if the order is still pending.
+  // `transactionId` is the Square payment id Square appends to the redirect URL;
+  // we also fall back to the stored Square order id. The webhook is authoritative
+  // — this just lets the page show "paid" immediately when the buyer returns.
+  if (order && order.status === "PENDING" && isSquareConfigured) {
     try {
-      const session = await stripe.checkout.sessions.retrieve(sp.session_id);
-      if (session.payment_status === "paid") {
-        const pi =
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : session.payment_intent?.id;
-        await markOrderPaid(order.id, { paymentIntentId: pi });
+      let paid = false;
+      let paymentRef: string | undefined;
+
+      if (sp.transactionId) {
+        const payment = await getPayment(sp.transactionId);
+        if (payment?.status === "COMPLETED") {
+          paid = true;
+          paymentRef = payment.id;
+        }
+      }
+      if (!paid && order.paymentSessionId) {
+        const sqOrder = await getOrder(order.paymentSessionId);
+        if (sqOrder?.paid) paid = true;
+      }
+
+      if (paid) {
+        await markOrderPaid(order.id, { paymentRef });
         order = await prisma.order.findUnique({
           where: { id: order.id },
           include: { items: true },
@@ -61,6 +80,9 @@ export default async function SuccessPage({
   }
 
   const paid = order.status === "PAID" || order.status === "FULFILLED";
+  // Reserve mode: the order was recorded but no charge was taken — the seller
+  // follows up to collect payment. Show that clearly instead of "awaiting payment".
+  const reserved = !paid && sp.reserved === "1";
 
   return (
     <section className="section">
@@ -74,8 +96,22 @@ export default async function SuccessPage({
           <p className="mt-2 text-ink/60">
             {paid
               ? "Your payment was received. A confirmation is on its way to your inbox."
-              : "Your order was placed and is awaiting payment confirmation."}
+              : reserved
+                ? "We've got your order — and you haven't been charged anything yet."
+                : "Your order was placed and is awaiting payment confirmation."}
           </p>
+
+          {reserved ? (
+            <div className="mt-6 rounded-2xl bg-kava-50 px-5 py-4 text-left text-sm text-ink/75 ring-1 ring-kava-100">
+              <p className="font-semibold text-kava-700">What happens next</p>
+              <p className="mt-1">
+                We&apos;ll reach out to <span className="font-medium">{order.email}</span>
+                {order.phone ? <> (or <span className="font-medium">{order.phone}</span>)</> : null}{" "}
+                within one business day to confirm your order and arrange payment. Nothing
+                is charged until you say go.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-6 inline-flex flex-col items-center rounded-2xl bg-cream px-6 py-4">
             <span className="text-xs uppercase tracking-wider text-ink/50">Order number</span>

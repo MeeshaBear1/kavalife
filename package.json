@@ -9,10 +9,13 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "db:dev": "node scripts/dev-db.mjs",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma db push --force-reset && npm run db:seed"
+    "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "smoke": "node scripts/smoke-checkout.mjs",
+    "smoke:reserve": "node scripts/smoke-reserve.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -25,10 +28,11 @@
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "stripe": "^17.5.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.2",
+    "@electric-sql/pglite-socket": "^0.2.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.4",

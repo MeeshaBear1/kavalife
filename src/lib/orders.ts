@@ -4,10 +4,10 @@ import { prisma } from "./db";
 
 /**
  * Idempotently mark an order PAID: decrement stock + write a SALE movement for
- * each line exactly once. Safe to call from the Stripe webhook, the mock
+ * each line exactly once. Safe to call from the Square webhook, the mock
  * checkout path, and the admin "mark paid" action — re-calls are no-ops.
  */
-export async function markOrderPaid(orderId: string, opts?: { paymentIntentId?: string }) {
+export async function markOrderPaid(orderId: string, opts?: { paymentRef?: string }) {
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { id: orderId },
@@ -43,7 +43,7 @@ export async function markOrderPaid(orderId: string, opts?: { paymentIntentId?: 
       data: {
         status: OrderStatus.PAID,
         paidAt: new Date(),
-        stripePaymentIntentId: opts?.paymentIntentId ?? order.stripePaymentIntentId,
+        paymentRef: opts?.paymentRef ?? order.paymentRef,
       },
     });
   });

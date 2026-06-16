@@ -4,7 +4,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: kava
-      POSTGRES_PASSWORD: kava_dev_password
+      # Override in a .env file next to this compose file for production.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-kava_dev_password}"
       POSTGRES_DB: kavalife
     volumes:
       - kava_db:/var/lib/postgresql/data
@@ -24,21 +25,53 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: "postgresql://kava:kava_dev_password@db:5432/kavalife"
+      DATABASE_URL: "postgresql://kava:${POSTGRES_PASSWORD:-kava_dev_password}@db:5432/kavalife"
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
       SESSION_SECRET: "${SESSION_SECRET:-dev_change_me_session_secret_min_32_chars_long_please}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@kavalife.local}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
-      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
-      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
-      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}"
+      # "reserve" = take orders without charging (launch mode); "auto"/"mock"/"square".
+      CHECKOUT_MODE: "${CHECKOUT_MODE:-auto}"
+      # ---- Square (blank = mock checkout mode; see SQUARE_SETUP.md) ----
+      SQUARE_ENVIRONMENT: "${SQUARE_ENVIRONMENT:-sandbox}"
+      SQUARE_ACCESS_TOKEN: "${SQUARE_ACCESS_TOKEN:-}"
+      SQUARE_LOCATION_ID: "${SQUARE_LOCATION_ID:-}"
+      SQUARE_WEBHOOK_SIGNATURE_KEY: "${SQUARE_WEBHOOK_SIGNATURE_KEY:-}"
+      SQUARE_WEBHOOK_URL: "${SQUARE_WEBHOOK_URL:-}"
+      SQUARE_API_VERSION: "${SQUARE_API_VERSION:-}"
       UPLOAD_DIR: "/app/uploads"
     volumes:
       # Persist admin-uploaded product photos across rebuilds.
       - kava_uploads:/app/uploads
     ports:
-      - "3000:3000"
+      # Bound to localhost only — the public entrypoint in production is Caddy
+      # (below), which reaches the app over the compose network as `app:3000`.
+      # For a quick local run this is still http://localhost:3000.
+      - "127.0.0.1:3000:3000"
+
+  # Reverse proxy with automatic HTTPS (Let's Encrypt). Only starts with the
+  # "prod" profile:  docker compose --profile prod up -d --build
+  # Requires SITE_DOMAIN set in .env and that domain's DNS pointed at this server.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["prod"]
+    depends_on:
+      - app
+    environment:
+      # Set this in .env to your real domain (e.g. shop.kavalife.com) so Caddy can
+      # obtain a TLS cert. Defaults to localhost (no public cert) if unset.
+      SITE_DOMAIN: "${SITE_DOMAIN:-localhost}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   kava_db:
   kava_uploads:
+  caddy_data:
+  caddy_config:

@@ -28,6 +28,10 @@ yarn-error.log*
 /prisma/*.db
 /prisma/*.db-journal
 
+# local dev database cluster (npm run db:dev)
+/.pgdata
+/.pglite
+
 # user-uploaded product photos (local dev)
 /uploads
 

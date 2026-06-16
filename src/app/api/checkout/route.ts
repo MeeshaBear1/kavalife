@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { createOrderPaymentLink } from "@/lib/order-payment";
+import { checkoutMode } from "@/lib/checkout-mode";
 import { getSettings, computeShippingCents, computeTaxCents } from "@/lib/settings";
 import { markOrderPaid } from "@/lib/orders";
 import { generateOrderNumber } from "@/lib/utils";
@@ -120,8 +121,22 @@ export async function POST(req: Request) {
     },
   });
 
-  // --- MOCK MODE: no Stripe keys -> mark paid immediately so the flow works. ---
-  if (!isStripeConfigured || !stripe) {
+  const mode = checkoutMode();
+
+  // --- RESERVE MODE: record the order, collect contact info, DON'T charge. ---
+  // The seller follows up to take payment, then marks it paid in the admin
+  // (which deducts stock). Stock is intentionally NOT held here — a pending
+  // reserve is a lead, not a confirmed sale. Used while no kava-friendly card
+  // processor is connected.
+  if (mode === "reserve") {
+    return NextResponse.json({
+      url: `${siteUrl()}/checkout/success?order=${order.orderNumber}&reserved=1`,
+      reserved: true,
+    });
+  }
+
+  // --- MOCK MODE: no Square keys -> mark paid immediately so the flow works. ---
+  if (mode === "mock") {
     await markOrderPaid(order.id);
     return NextResponse.json({
       url: `${siteUrl()}/checkout/success?order=${order.orderNumber}&mock=1`,
@@ -129,57 +144,14 @@ export async function POST(req: Request) {
     });
   }
 
-  // --- REAL STRIPE CHECKOUT ---
-  const lineItems: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] = lines.map(
-    (l) => ({
-      price_data: {
-        currency: settings.currency,
-        product_data: { name: l.product.name },
-        unit_amount: l.product.priceCents,
-      },
-      quantity: l.quantity,
-    })
-  );
-  if (shippingCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: settings.currency,
-        product_data: { name: "Shipping" },
-        unit_amount: shippingCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (taxCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: settings.currency,
-        product_data: { name: "Tax" },
-        unit_amount: taxCents,
-      },
-      quantity: 1,
-    });
-  }
-
+  // --- REAL SQUARE CHECKOUT (hosted payment link) ---
+  // Building the link from the persisted order lives in one place so storefront
+  // checkout and the admin "Collect payment" action stay in lockstep.
   try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: lineItems,
-      customer_email: email.toLowerCase(),
-      client_reference_id: order.id,
-      metadata: { orderId: order.id, orderNumber: order.orderNumber },
-      success_url: `${siteUrl()}/checkout/success?order=${order.orderNumber}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl()}/checkout?canceled=1`,
-    });
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { stripeSessionId: session.id },
-    });
-
-    return NextResponse.json({ url: session.url });
+    const { url } = await createOrderPaymentLink(order.id);
+    return NextResponse.json({ url });
   } catch (err) {
-    console.error("Stripe checkout error:", err);
+    console.error("Square checkout error:", err);
     return NextResponse.json(
       { error: "Could not start checkout. Please try again." },
       { status: 502 }

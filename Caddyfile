@@ -1,0 +1,14 @@
+# Kava Life reverse proxy — automatic HTTPS via Let's Encrypt.
+# SITE_DOMAIN is injected from .env by docker-compose (the "prod" profile).
+# Caddy obtains + renews the TLS certificate automatically once this domain's
+# DNS A/AAAA record points at the server and ports 80/443 are reachable.
+{$SITE_DOMAIN} {
+	encode gzip zstd
+
+	# Allow large product-photo uploads through the admin.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy app:3000
+}

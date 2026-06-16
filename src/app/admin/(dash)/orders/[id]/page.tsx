@@ -2,15 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isSquareConfigured } from "@/lib/square";
 import { formatCents } from "@/lib/money";
 import PageHeader from "@/components/admin/PageHeader";
 import StatusBadge from "@/components/admin/StatusBadge";
 import ConfirmSubmitButton from "@/components/admin/ConfirmSubmitButton";
+import CopyLinkField from "@/components/admin/CopyLinkField";
 import {
   markPaidAction,
   markFulfilledAction,
   cancelOrderAction,
   refundOrderAction,
+  createPaymentLinkAction,
 } from "@/app/admin/orders/actions";
 
 export const dynamic = "force-dynamic";
@@ -247,6 +250,53 @@ export default async function OrderDetailPage({
               </p>
             )}
           </section>
+
+          {/* Collect payment — process a live order's payment through Square */}
+          {canMarkPaid ? (
+            <section className="card-surface p-6">
+              <h2 className="mb-1 font-display text-lg font-bold text-ink">Collect payment</h2>
+              <p className="mb-4 text-sm text-ink/55">
+                Send the customer a secure Square link to pay online, or record a
+                payment you collected another way with “Mark as paid” above.
+              </p>
+
+              {order.paymentLinkUrl ? (
+                <>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink/40">
+                    Square payment link
+                  </p>
+                  <CopyLinkField url={order.paymentLinkUrl} email={order.email} />
+                  <form action={createPaymentLinkAction} className="mt-3">
+                    <input type="hidden" name="id" value={order.id} />
+                    <ConfirmSubmitButton
+                      className="text-sm font-semibold text-kava-600 hover:text-kava-700"
+                      pendingLabel="Refreshing…"
+                    >
+                      Regenerate link
+                    </ConfirmSubmitButton>
+                  </form>
+                </>
+              ) : isSquareConfigured ? (
+                <form action={createPaymentLinkAction}>
+                  <input type="hidden" name="id" value={order.id} />
+                  <ConfirmSubmitButton
+                    className="btn bg-forest px-6 py-3 text-white shadow-soft hover:bg-forest/90"
+                    pendingLabel="Creating link…"
+                  >
+                    Create Square payment link
+                  </ConfirmSubmitButton>
+                </form>
+              ) : (
+                <div className="rounded-2xl bg-sunny/20 px-4 py-3 text-sm text-ink/70 ring-1 ring-sunset-400/25">
+                  Square isn’t connected yet. Add{" "}
+                  <code className="font-mono text-xs">SQUARE_ACCESS_TOKEN</code> and{" "}
+                  <code className="font-mono text-xs">SQUARE_LOCATION_ID</code> to send
+                  pay-online links. Until then, collect payment manually and click{" "}
+                  <span className="font-semibold">Mark as paid</span>.
+                </div>
+              )}
+            </section>
+          ) : null}
         </div>
 
         {/* Right: customer + meta */}
@@ -303,25 +353,25 @@ export default async function OrderDetailPage({
               <InfoRow label="Currency" value={order.currency.toUpperCase()} />
             </div>
 
-            {(order.stripeSessionId || order.stripePaymentIntentId || order.notes) && (
+            {(order.paymentSessionId || order.paymentRef || order.notes) && (
               <div className="mt-4 space-y-3 border-t border-sand pt-4 text-sm">
-                {order.stripePaymentIntentId ? (
+                {order.paymentRef ? (
                   <div>
                     <p className="text-xs uppercase tracking-wider text-ink/40">
-                      Payment intent
+                      Square payment ID
                     </p>
                     <p className="break-all font-mono text-xs text-ink/70">
-                      {order.stripePaymentIntentId}
+                      {order.paymentRef}
                     </p>
                   </div>
                 ) : null}
-                {order.stripeSessionId ? (
+                {order.paymentSessionId ? (
                   <div>
                     <p className="text-xs uppercase tracking-wider text-ink/40">
-                      Checkout session
+                      Square order ID
                     </p>
                     <p className="break-all font-mono text-xs text-ink/70">
-                      {order.stripeSessionId}
+                      {order.paymentSessionId}
                     </p>
                   </div>
                 ) : null}

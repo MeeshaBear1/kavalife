@@ -89,8 +89,14 @@ model Order {
   discountCents         Int         @default(0)
   totalCents            Int
   currency              String      @default("usd")
-  stripeSessionId       String?     @unique
-  stripePaymentIntentId String?
+  // Processor-agnostic payment refs. For Square: paymentSessionId = the Square
+  // order id created by the payment link; paymentRef = the Square payment id.
+  paymentSessionId      String?     @unique
+  paymentRef            String?
+  // The Square hosted payment link URL once one has been generated for this
+  // order (storefront checkout or the admin "Collect payment" action), so the
+  // seller can re-send it to the customer.
+  paymentLinkUrl        String?
   discountCode          String?
   notes                 String?
   createdAt             DateTime    @default(now())

@@ -1,12 +1,12 @@
 # Kava Life — self-hosted storefront
 
 A complete, self-hosted replacement for the Lovable-built kavalifebrand.com: a faithful
-marketing site + a real e-commerce store with **Stripe payments**, an **admin panel**, and a
+marketing site + a real e-commerce store with **Square payments**, an **admin panel**, and a
 built-in **inventory tracking system**. One Next.js codebase, one Postgres database, one Docker
 command to run it anywhere.
 
 > **Built with:** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · Prisma ·
-> PostgreSQL · Stripe.
+> PostgreSQL · Square.
 
 ---
 
@@ -30,7 +30,7 @@ That's it. Compose will:
 - **Admin panel:** http://localhost:3000/admin
   (default login `admin@kavalife.local` / `changeme123` — **change this**, see below)
 
-Payments run in **mock mode** until you add Stripe keys, so the entire cart → checkout → order →
+Payments run in **mock mode** until you add Square credentials, so the entire cart → checkout → order →
 inventory-decrement flow works immediately with zero external accounts.
 
 ### Change the admin password / secrets
@@ -49,22 +49,39 @@ from the database, or delete the `AdminUser` row and re-run the seed with the ne
 
 ---
 
-## Local development (without Docker for the app)
+## Local development
 
-Run just Postgres in Docker and the app on your machine for hot reload:
+### Option A — no Docker at all (recommended for quick local work)
+
+`npm run db:dev` starts a real PostgreSQL (PGlite, a WASM build of Postgres — no
+Docker, no system install) on `localhost:5434`, exactly where `.env.example`
+points. Data persists in `./.pglite`.
 
 ```bash
-# 1. start only the database (exposed on host port 5434)
-docker compose up db -d
-
-# 2. install + set up
 npm install
-cp .env.example .env          # the defaults already point at localhost:5434
-npm run db:push               # create tables
-npm run db:seed               # seed catalog + admin + settings
+cp .env.example .env           # defaults already point at localhost:5434
 
-# 3. run
-npm run dev                   # http://localhost:3000
+# terminal 1 — leave this running:
+npm run db:dev
+
+# terminal 2:
+npm run db:push                # create tables
+npm run db:seed                # seed catalog + admin + settings
+npm run dev                    # http://localhost:3000
+```
+
+> The dev `DATABASE_URL` carries `?sslmode=disable&pgbouncer=true&connection_limit=1`
+> for PGlite. A normal managed Postgres (production) needs none of those — just a
+> plain `postgresql://…` URL. See `.env` comments.
+
+### Option B — Postgres in Docker, app on your machine
+
+```bash
+docker compose up db -d        # database only, on host port 5434
+npm install
+cp .env.example .env
+npm run db:push && npm run db:seed
+npm run dev
 ```
 
 Handy scripts: `npm run db:studio` (Prisma Studio), `npm run db:reset` (wipe + reseed),
@@ -72,30 +89,31 @@ Handy scripts: `npm run db:studio` (Prisma Studio), `npm run db:reset` (wipe + r
 
 ---
 
-## Enabling real Stripe payments
+## Enabling real Square payments
 
-> 📘 **For the exact, copy-paste walkthrough (test → verify → go live), see
-> [STRIPE_SETUP.md](STRIPE_SETUP.md).** Quick version below.
+> 📘 **For the exact, copy-paste walkthrough (sandbox → verify → go live), see
+> [SQUARE_SETUP.md](SQUARE_SETUP.md).** Quick version below.
 
-1. Get your keys from the [Stripe dashboard](https://dashboard.stripe.com/apikeys) (use **test
-   mode** first).
+1. Get your credentials from the [Square Developer dashboard](https://developer.squareup.com/apps)
+   (use the **Sandbox** environment first).
 2. Set in `.env`:
    ```env
-   STRIPE_SECRET_KEY=sk_test_...
-   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-   STRIPE_WEBHOOK_SECRET=whsec_...
+   SQUARE_ENVIRONMENT=sandbox
+   SQUARE_ACCESS_TOKEN=...        # Developer → your app → Credentials
+   SQUARE_LOCATION_ID=...         # Developer → Locations
+   SQUARE_WEBHOOK_SIGNATURE_KEY=...   # Developer → Webhooks → Signature key
    ```
-3. Point a webhook at `https://yourdomain.com/api/webhooks/stripe` for the event
-   `checkout.session.completed`. For local testing:
-   ```bash
-   stripe listen --forward-to localhost:3000/api/webhooks/stripe
-   ```
-4. Restart. Checkout now redirects to Stripe Checkout; on success the webhook marks the order paid
-   and decrements stock. (A success-page fallback also reconciles payment if the webhook is delayed.)
+3. Add a webhook endpoint at `https://yourdomain.com/api/webhooks/square` subscribed to
+   `payment.created`, `payment.updated`, `refund.created`, `refund.updated`. For local testing,
+   expose your server with `ngrok http 3000` and use the ngrok URL (set `SQUARE_WEBHOOK_URL` to it).
+4. Restart. Checkout now redirects to a Square hosted payment link; on success the webhook marks the
+   order paid and decrements stock. (A success-page fallback also reconciles payment if the webhook
+   is delayed.)
 
-**Note on kava + payment processors:** kava is generally permitted by Stripe (unlike kratom). Confirm
-your specific products are acceptable under Stripe's policies before going live; if not, the checkout
-layer is isolated in `src/lib/stripe.ts` + `src/app/api/checkout` and can be swapped.
+**Note on kava + payment processors:** payment processors classify kava as "high-risk." Confirm with
+Square that your specific catalog is acceptable **before** going live (kratom is prohibited; kava is
+gray-area). The checkout layer is isolated in `src/lib/square.ts` + `src/app/api/checkout` +
+`src/app/api/webhooks/square` and can be swapped for another processor.
 
 ---
 
@@ -128,11 +146,11 @@ Every stock change is written to an append-only `StockMovement` ledger (`INITIAL
 ```
 prisma/schema.prisma     data model (products, inventory, orders, admin, newsletter, settings)
 prisma/seed.ts           catalog + admin + settings seed (idempotent)
-src/lib/                 db, auth (JWT cookie), stripe, cart, orders lifecycle, money, validation
+src/lib/                 db, auth (JWT cookie), square, cart, orders lifecycle, money, validation
 src/middleware.ts        protects /admin/*
 src/app/(store)/         storefront
 src/app/admin/           admin panel
-src/app/api/             checkout, stripe webhook, newsletter
+src/app/api/             checkout, square webhook, newsletter
 src/components/           store + admin + ui components
 docker-compose.yml       app + postgres
 Dockerfile               production image (runs migrate + seed on boot)
@@ -142,17 +160,26 @@ Dockerfile               production image (runs migrate + seed on boot)
 
 ## Deploying to a VPS
 
+📘 **Full turnkey runbook: [DEPLOY.md](DEPLOY.md)** — app + PostgreSQL + automatic
+HTTPS in one Compose stack. The short version:
+
 1. Copy the repo to your server (Hetzner / DigitalOcean / etc.) with Docker installed.
-2. Create `.env` with production secrets (`SESSION_SECRET`, `ADMIN_*`, `NEXT_PUBLIC_SITE_URL`, and
-   Stripe keys).
-3. `docker compose up -d --build`.
-4. Put a reverse proxy (Caddy/Nginx/Traefik) in front for TLS, forwarding to port 3000.
-5. Configure the Stripe webhook to your public `/api/webhooks/stripe` URL.
+2. `cp .env.production.example .env` and fill in the values (domain, generated secrets,
+   `CHECKOUT_MODE`). Point your domain's DNS A record at the server.
+3. `docker compose --profile prod up -d --build` — builds the app, runs the DB
+   migrate + seed on first boot, and starts **Caddy**, which fetches a TLS cert for
+   your domain automatically.
+
+The store launches in **reserve-order mode** (`CHECKOUT_MODE=reserve`): orders are
+taken without charging and you collect payment manually from Admin → Orders — the
+practical way to go live before a kava-friendly card processor is approved (mainstream
+processors classify kava as high-risk). See [DEPLOY.md](DEPLOY.md) and
+[SQUARE_SETUP.md](SQUARE_SETUP.md).
 
 ### Hardening checklist before launch
 - [ ] Set a strong `SESSION_SECRET` (≥ 32 chars) and a real `ADMIN_PASSWORD`.
-- [ ] Change the Postgres password in `docker-compose.yml` (and the matching `DATABASE_URL`).
-- [ ] Switch Stripe to live keys + live webhook.
+- [ ] Set a strong `POSTGRES_PASSWORD` in `.env` (compose injects it into both the DB and `DATABASE_URL`).
+- [ ] Confirm a payment plan: launch in `reserve` mode, then switch to `square`/other once a processor approves your catalog.
 - [ ] (Optional) Self-host the fonts — they currently load from Google Fonts via `<link>` in
       `src/app/layout.tsx` to keep offline builds working; vendor the woff2 files for full
       independence.

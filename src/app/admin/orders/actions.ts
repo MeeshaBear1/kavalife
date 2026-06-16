@@ -6,6 +6,7 @@ import {
   markOrderFulfilled,
   closeOrder,
 } from "@/lib/orders";
+import { createOrderPaymentLink } from "@/lib/order-payment";
 import { requireAdminAction } from "@/components/admin/require-admin";
 
 function getId(fd: FormData): string {
@@ -46,5 +47,18 @@ export async function refundOrderAction(fd: FormData): Promise<void> {
   await requireAdminAction();
   const id = getId(fd);
   await closeOrder(id, "REFUNDED");
+  revalidateOrder(id);
+}
+
+/**
+ * Generate (or regenerate) a Square hosted payment link for a pending order so
+ * the seller can collect payment online for a live (reserve) order. Requires
+ * Square credentials; the order page only surfaces this when Square is
+ * configured, so the "not configured" error path isn't hit in normal use.
+ */
+export async function createPaymentLinkAction(fd: FormData): Promise<void> {
+  await requireAdminAction();
+  const id = getId(fd);
+  await createOrderPaymentLink(id);
   revalidateOrder(id);
 }
