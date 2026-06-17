@@ -4,8 +4,13 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection for the app runtime (pgBouncer / Neon pooled URL).
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection used by Prisma CLI (db push / migrate).
+  // In Docker & local dev set DIRECT_URL to the same value as DATABASE_URL.
+  // On Vercel/Neon, set this to the direct (non-pooled) connection string.
+  directUrl = env("DIRECT_URL")
 }
 
 enum Category {

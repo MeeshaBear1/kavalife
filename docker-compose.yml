@@ -26,6 +26,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://kava:${POSTGRES_PASSWORD:-kava_dev_password}@db:5432/kavalife"
+      DIRECT_URL: "postgresql://kava:${POSTGRES_PASSWORD:-kava_dev_password}@db:5432/kavalife"
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
       SESSION_SECRET: "${SESSION_SECRET:-dev_change_me_session_secret_min_32_chars_long_please}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@kavalife.local}"
