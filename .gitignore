@@ -43,3 +43,7 @@ yarn-error.log*
 
 # migration workspace (transient)
 /.migration
+
+.vercel
+.env*
+.env.local
